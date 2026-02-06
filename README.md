@@ -1,5 +1,5 @@
 # 🌾 RiceGrid (GridCutter)
-
+> **[🚀 최신 버전 다운로드 (v1.0.0)](https://github.com/Lookies09/GridCutter/releases/tag/v1.0.0)**
 > **React와 Python(pywebview)을 결합한 지능형 이미지 그리드 커팅 및 관리 도구입니다.** > 고해상도 이미지(TIF 등)를 격자 형태로 정밀하게 자르고, 관리하기 쉬운 인터페이스를 제공합니다.
 > 모델에 사용되는 이미지를 전처리하는 용도로 만들어졌습니다.
 
