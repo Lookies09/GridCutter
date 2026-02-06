@@ -107,3 +107,35 @@ GridCutter/
 ├── RiceGridApp.spec          # PyInstaller 설정 파일
 └── README.md                 # 프로젝트 문서
 ```
+
+## 🛠 Troubleshooting & FAQ
+
+프로그램 개발 및 빌드 과정에서 발생한 주요 이슈와 해결 방법을 정리합니다.
+
+### 1. 런타임 에러 (Runtime Error)
+**에러 메시지:** `RuntimeError: Failed to resolve Python.Runtime.Loader.Initialize...`
+* **원인**: `pywebview`가 Windows의 `.NET` 라이브러리(`pythonnet`)를 로드하여 전용 창을 띄우려 할 때, 필요한 DLL 파일을 찾지 못하거나 경로가 꼬여서 발생합니다.
+* **해결 방법**:
+    1.  **빌드 옵션 고정**: PyInstaller 빌드 시 `--collect-all pywebview`와 `--paths` 설정을 명확히 하여 라이브러리가 포함되도록 합니다.
+    2.  **환경 확인**: 실행 환경에 [Microsoft WebView2 Runtime](https://developer.microsoft.com/ko-kr/microsoft-edge/webview2/)이 설치되어 있어야 합니다.
+    3.  **최후의 수단**: `.NET` 라이브러리 충돌이 해결되지 않을 경우, `webview.start(gui='browser')`를 사용하여 외부 브라우저 모드로 실행할 수 있습니다. (단, 이 경우 API 통신 방식을 Flask 등으로 전환해야 함)
+
+### 2. 프론트엔드 API 연결 문제 (Undefined API)
+**에러 메시지:** `TypeError: Cannot read properties of undefined (reading 'api')`
+* **원인**: 브라우저 환경에서 `window.pywebview.api` 객체가 생성되기 전에 호출되거나, 외부 브라우저(`gui='browser'`) 사용으로 주입이 차단된 경우입니다.
+* **해결 방법**:
+    1.  `App.jsx` 내부에 `pywebviewready` 이벤트 리스너를 추가하여 API 로드 완료 후 기능을 실행하도록 구현합니다.
+    2.  빌드 시 `gui='browser'` 옵션을 제거하고 기본 윈도우 모드로 실행하여 API 주입을 활성화합니다.
+
+### 3. 아이콘 및 캐시 이슈
+**현상:** 빌드 후에도 이전 아이콘이 보이거나 변경 사항이 반영되지 않음
+* **원인**: Windows 탐색기의 아이콘 캐싱 또는 PyInstaller의 `build` 폴더 찌꺼기가 남은 경우입니다.
+* **해결 방법**:
+    1.  **빌드 전 청소**: `Remove-Item -Recurse -Force build, dist, *.spec` 명령어로 기존 빌드 데이터를 완전히 삭제합니다.
+    2.  **캐시 강제 갱신**: 빌드된 `.exe` 파일의 이름을 변경하면 Windows가 아이콘을 새로 로드합니다.
+
+### 4. 빌드 후 실행 무반응
+* **원인**: `main.py` 파일 하단에 `if __name__ == "__main__":` 실행 블록이 누락되어 함수가 호출되지 않는 경우입니다.
+* **해결 방법**: 반드시 스크립트 최하단에 `main()` 호출 코드를 포함해야 합니다.
+
+---
