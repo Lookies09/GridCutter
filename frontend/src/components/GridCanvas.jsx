@@ -1,92 +1,87 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import styled from 'styled-components';
+import { drawRotatedGrid, drawGridNumbers } from '../utils/gridUtils';
+import { Search, Move, MousePointer } from 'lucide-react';
+
+// --- Styled Components ---
 
 const CanvasContainer = styled.div`
   width: 100%;
   height: 100%;
-  background-color: #1e1e1e;
+  background-color: #121212;
+  /* 미세한 격자 배경으로 에디터 느낌 강조 */
+  background-image: radial-gradient(#252525 1px, transparent 1px);
+  background-size: 20px 20px;
   overflow: hidden;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `;
 
 const StyledCanvas = styled.canvas`
-  cursor: crosshair;
   display: block;
+  /* 상태에 따라 커서 변경 */
+  cursor: ${props => props.isPanning ? 'grabbing' : 'crosshair'};
 `;
+
+// 우측 하단 배율 표시기
+const ZoomIndicator = styled.div`
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(38, 38, 38, 0.8);
+  backdrop-filter: blur(8px);
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #3f3f46;
+  color: #a1a1aa;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+`;
+
+// 좌측 상단 툴 상태 표시기
+const ToolStatus = styled.div`
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  display: flex;
+  gap: 10px;
+`;
+
+const Badge = styled.div`
+  background: rgba(38, 38, 38, 0.8);
+  backdrop-filter: blur(8px);
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #3f3f46;
+  color: ${props => props.active ? '#818cf8' : '#71717a'};
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+// --- Component ---
 
 const GridCanvas = ({ imageData, config, clicks, onCanvasClick }) => {
   const canvasRef = useRef(null);
   const [imageObj, setImageObj] = useState(null);
-
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
 
-  // --- [1] 유틸리티 함수 ---
-  const drawLine = (ctx, x1, y1, x2, y2) => {
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  };
-
-  const drawRotatedGrid = (ctx, pts, cfg) => {
-    const { rows, cols, margin, rowGap, colGap, groupGap, groups, gridColor } = cfg;
-
-    // 1:1 좌표계이므로 scaleX, scaleY는 생략 (이미 좌표가 preview_w 기준임)
-    const p1 = pts[0];
-    const p2 = pts[1];
-    const p3 = pts[2];
-
-    const vX = { x: p2.x - p1.x, y: p2.y - p1.y };
-    const distX = Math.sqrt(vX.x ** 2 + vX.y ** 2);
-    const unitX = { x: vX.x / distX, y: vX.y / distX };
-    const unitY = { x: -unitX.y, y: unitX.x }; 
-
-    const vP3 = { x: p3.x - p1.x, y: p3.y - p1.y };
-    const distY = Math.abs(vP3.x * unitY.x + vP3.y * unitY.y); 
-
-    ctx.strokeStyle = gridColor || '#ffffff'; 
-    ctx.lineWidth = 1 / transform.scale;
-
-    const totalGroupGap = groupGap * (groups - 1);
-  const availableWidth = distX - (margin * 2) - totalGroupGap;
-  const groupWidth = availableWidth / groups;
-
-  // [수정] 셀 너비/높이 계산 시 사이 간격을 제외함
-  const cellWidth = (groupWidth - (colGap * (cols - 1))) / cols;
-  const cellHeight = (distY - (margin * 2) - (rowGap * (rows - 1))) / rows;
-
-  for (let g = 0; g < groups; g++) {
-    const gOffset = margin + g * (groupWidth + groupGap);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        // [수정] 각 셀의 시작 위치 계산 (간격 포함)
-        const dX = gOffset + (c * (cellWidth + colGap));
-        const dY = margin + (r * (cellHeight + rowGap));
-
-        // 셀의 네 꼭짓점 계산
-        const pTL = { x: p1.x + (unitX.x * dX) + (unitY.x * dY), y: p1.y + (unitX.y * dX) + (unitY.y * dY) };
-        const pTR = { x: pTL.x + (unitX.x * cellWidth), y: pTL.y + (unitX.y * cellWidth) };
-        const pBL = { x: pTL.x + (unitY.x * cellHeight), y: pTL.y + (unitY.y * cellHeight) };
-        const pBR = { x: pTR.x + (unitY.x * cellHeight), y: pTR.y + (unitY.y * cellHeight) };
-
-        // 개별 셀 그리기 (사각형)
-        drawLine(ctx, pTL.x, pTL.y, pTR.x, pTR.y);
-        drawLine(ctx, pTR.x, pTR.y, pBR.x, pBR.y);
-        drawLine(ctx, pBR.x, pBR.y, pBL.x, pBL.y);
-        drawLine(ctx, pBL.x, pBL.y, pTL.x, pTL.y);
-      }
-    }
-  }
-};
-
-const resetView = useCallback(() => {
+  const resetView = useCallback(() => {
     if (!canvasRef.current || !imageData) return;
     const container = canvasRef.current.parentElement;
     const scale = Math.min(
-      (container.clientWidth * 0.9) / imageData.preview_w,
-      (container.clientHeight * 0.9) / imageData.preview_h
+      (container.clientWidth * 0.85) / imageData.preview_w,
+      (container.clientHeight * 0.85) / imageData.preview_h
     );
     setTransform({
       x: (container.clientWidth - imageData.preview_w * scale) / 2,
@@ -95,21 +90,13 @@ const resetView = useCallback(() => {
     });
   }, [imageData]);
 
-  // --- [1] 이미지 로드 ---
   useEffect(() => {
     if (!imageData?.base64) return;
     const img = new Image();
     img.src = imageData.base64;
-    img.onload = () => {
-      setImageObj(img);
-      // 이미지 로드 시 중앙 정렬 및 초기 스케일 계산
-      resetView();
-    };
-  }, [imageData]);
+    img.onload = () => { setImageObj(img); resetView(); };
+  }, [imageData, resetView]);
 
-  
-
-  // --- [2] 그리기 로직 ---
   useEffect(() => {
     if (!imageObj || !canvasRef.current) return;
     const canvas = canvasRef.current;
@@ -118,52 +105,83 @@ const resetView = useCallback(() => {
 
     canvas.width = container.clientWidth;
     canvas.height = container.clientHeight;
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 변환 행렬 적용 (Pan & Zoom)
+    // 부드러운 렌더링 설정
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     ctx.save();
     ctx.translate(transform.x, transform.y);
     ctx.scale(transform.scale, transform.scale);
 
-    // 이미지 그리기
+    // 1. 이미지 그리기 (그림자 효과 추가)
+    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+    ctx.shadowBlur = 20 / transform.scale;
     ctx.drawImage(imageObj, 0, 0, imageData.preview_w, imageData.preview_h);
+    ctx.shadowBlur = 0; // 그림자 해제
 
-    // 점 및 그리드 그리기 (1:1 preview_w 좌표계 사용)
-    const colors = ['#ff4d4d', '#4dff4d', '#4d4dff'];
+    // 2. 클릭한 점 그리기 (고급 디자인)
+    const colors = ['#ef4444', '#22c55e', '#3b82f6']; // Red, Green, Blue (500)
     clicks.forEach((p, idx) => {
+      ctx.save();
+      
+      // 발광 효과
+      ctx.shadowBlur = 10 / transform.scale;
+      ctx.shadowColor = colors[idx];
+      
+      // 바깥 원
       ctx.fillStyle = colors[idx];
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 6 / transform.scale, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 7 / transform.scale, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2 / transform.scale;
-      ctx.stroke();
+
+      // 안쪽 흰 점
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.5 / transform.scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 포인트 인덱스 텍스트 표시
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${12 / transform.scale}px Inter, sans-serif`;
+      ctx.fillText(idx + 1, p.x + (10 / transform.scale), p.y - (10 / transform.scale));
+      
+      ctx.restore();
     });
 
-    // drawRotatedGrid 호출 (이전 로직 동일)
+    // 3. 그리드 및 번호 그리기
     if (clicks.length === 3) {
-      // drawRotatedGrid 함수는 이전 답변의 로직을 그대로 사용한다고 가정
-      // (내부에서 p1, p2, p3를 1:1 좌표로 사용하므로 그대로 작동함)
-      drawRotatedGrid(ctx, clicks, config); 
+      const gridInfo = drawRotatedGrid(ctx, clicks, config, transform.scale);
+      if (gridInfo) {
+        drawGridNumbers(
+          ctx, 
+          { 
+            width: gridInfo.distX, 
+            height: gridInfo.distY, 
+            p1: clicks[0], 
+            unitX: gridInfo.unitX, 
+            unitY: gridInfo.unitY 
+          }, 
+          config, 
+          transform.scale
+        );
+      }
     }
     
     ctx.restore();
   }, [imageObj, clicks, config, transform, imageData]);
 
-  // --- [3] 이벤트 핸들러 ---
-
-  // 휠 확대/축소
+  // 휠 확대/축소 로직
   const handleWheel = (e) => {
-    const zoomSpeed = 0.001;
+    const zoomSpeed = 0.0015;
     const delta = -e.deltaY;
-    const newScale = Math.min(Math.max(transform.scale + delta * zoomSpeed, 0.1), 20);
+    const newScale = Math.min(Math.max(transform.scale + delta * zoomSpeed * transform.scale, 0.05), 50);
 
-    // 마우스 위치 기준으로 확대
     const rect = canvasRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-
     const zoomFactor = newScale / transform.scale;
     
     setTransform({
@@ -173,14 +191,12 @@ const resetView = useCallback(() => {
     });
   };
 
-  // 팬(이동) 시작
   const handleMouseDown = (e) => {
-    if (e.button === 2) { // 우클릭
+    if (e.button === 2) {
       setIsPanning(true);
       setLastMousePos({ x: e.clientX, y: e.clientY });
-    } else if (e.button === 0) { // 좌클릭 (점 찍기)
+    } else if (e.button === 0) {
       const rect = canvasRef.current.getBoundingClientRect();
-      // 변환 행렬을 역산하여 이미지상의 1:1 좌표 계산
       const x = (e.clientX - rect.left - transform.x) / transform.scale;
       const y = (e.clientY - rect.top - transform.y) / transform.scale;
 
@@ -200,18 +216,28 @@ const resetView = useCallback(() => {
   };
 
   const handleMouseUp = () => setIsPanning(false);
-  const handleContextMenu = (e) => e.preventDefault(); // 우클릭 메뉴 방지
 
   return (
-    <CanvasContainer onContextMenu={handleContextMenu}>
+    <CanvasContainer onContextMenu={(e) => e.preventDefault()}>
+      <ToolStatus>
+        <Badge active={!isPanning}><MousePointer size={12} /> SELECT</Badge>
+        <Badge active={isPanning}><Move size={12} /> PAN</Badge>
+      </ToolStatus>
+
       <StyledCanvas
         ref={canvasRef}
+        isPanning={isPanning}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       />
+
+      <ZoomIndicator>
+        <Search size={14} />
+        {Math.round(transform.scale * 100)}%
+      </ZoomIndicator>
     </CanvasContainer>
   );
 };
