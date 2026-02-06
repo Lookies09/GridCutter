@@ -3,6 +3,10 @@
 > **React와 Python(pywebview)을 결합한 지능형 이미지 그리드 커팅 및 관리 도구입니다.** > 고해상도 이미지(TIF 등)를 격자 형태로 정밀하게 자르고, 관리하기 쉬운 인터페이스를 제공합니다.
 > 모델에 사용되는 이미지를 전처리하는 용도로 만들어졌습니다.
 
+<p align="center">
+  <img width="48%" alt="image" src="https://github.com/user-attachments/assets/7268581e-70ce-49f9-b799-7f8c704aca58" />
+  <img width="48%" alt="image" src="https://github.com/user-attachments/assets/9bf3427e-0879-47a0-8fe7-eb984061471a" />
+</p>
 ---
 
 ## ✨ 주요 기능 (Key Features)
