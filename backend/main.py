@@ -1,6 +1,7 @@
 import sys
 import os
 import webview
+from src.core.app import RiceGridAPI
 
 if getattr(sys, 'frozen', False):
     base_path = sys._MEIPASS
@@ -24,11 +25,8 @@ def get_entrypoint():
     return 'http://localhost:5173'
 
 def main():
-    api = RiceGridAPI()    
+    api = RiceGridAPI()
     entry = get_entrypoint()
-    
-    if getattr(sys, 'frozen', False) and sys.platform == 'win32':
-        entry = entry.replace("\\", "/") # 윈도우 경로 구분자 통일
 
     window = webview.create_window(
         'RiceGrid', 
@@ -39,7 +37,8 @@ def main():
     )
     
     api.set_window(window)
-    webview.start(debug=not getattr(sys, 'frozen', False))
+    
+    webview.start(debug=False)
 
 if __name__ == "__main__":
     main()
