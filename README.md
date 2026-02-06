@@ -74,10 +74,11 @@ PyInstaller를 사용하여 단일 실행 파일(.exe)로 빌드할 수 있습�
 주의: 빌드 전 frontend 폴더에서 npm run build를 먼저 수행하여 dist 폴더를 생성해야 합니다.
 
 # 프로젝트 루트(GridCutter/) 폴더에서 실행
-pyinstaller --noconfirm --onedir --windowed `
+pyinstaller --clean --noconfirm --onefile --windowed `
 --icon="backend/app_icon.ico" `
 --add-data "frontend/dist;frontend/dist" `
 --add-data "backend/src;src" `
+--collect-all pywebview `
 --paths "backend" `
 --name "RiceGridApp" `
 backend/main.py
