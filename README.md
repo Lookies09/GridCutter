@@ -79,23 +79,25 @@ backend/main.py
 
 # 📂 프로젝트 구조 (Project Structure)
 
+```
 GridCutter/
-├── frontend/                 # React (Vite) 프론트엔드
+├── frontend/                 # React (Vite) 프론트엔드 소스
 │   ├── src/
-│   │   ├── components/       # 재사용 가능한 UI 컴포넌트 (버튼, 입력창 등)
-│   │   ├── utils/            # 프론트엔드 공통 유틸리티 함수
+│   │   ├── components/       # 재사용 가능한 UI 컴포넌트
+│   │   ├── utils/            # 프론트엔드 공통 유틸리티
 │   │   ├── App.jsx           # 메인 애플리케이션 컴포넌트
 │   │   └── main.jsx          # 리액트 진입점
-│   ├── dist/                 # 빌드된 정적 파일 (PyInstaller가 참조)
+│   ├── dist/                 # 빌드된 정적 파일 (PyInstaller 참조용)
 │   └── vite.config.js
 │
-├── backend/                  # Python 백엔드 및 앱 실행부
+├── backend/                  # Python 백엔드 및 로직
 │   ├── src/
-│   │   ├── core/             # 핵심 비즈니스 로직 (RiceGridAPI 등)
+│   │   ├── core/             # 핵심 비즈니스 로직 (API 등)
 │   │   └── utils/            # 이미지 처리, 파일 IO 등 공통 함수
-│   ├── main.py               # 프로그램 실행 및 webview 설정 진입점
+│   ├── main.py               # 프로그램 실행 진입점
 │   └── requirements.txt      # 파이썬 의존성 목록
 │
-├── dist                      # 빌드된 프로그램 위치
-├── RiceGridApp.spec          # PyInstaller 빌드 설정 파일
+├── dist/                     # 🚀 최종 빌드된 프로그램 (.exe) 위치
+├── RiceGridApp.spec          # PyInstaller 설정 파일
 └── README.md                 # 프로젝트 문서
+```
