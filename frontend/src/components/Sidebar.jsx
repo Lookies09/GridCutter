@@ -12,7 +12,9 @@ import {
   Palette,
   LayoutGrid,
   Square,
-  Crop
+  Crop,
+  ListOrdered,
+  Group
 } from 'lucide-react';
 
 // --- Styled Components ---
@@ -313,6 +315,30 @@ function Sidebar({
               </TabButton>
               <TabButton type="button" active={config.groupDirection === 'vertical'} onClick={() => setConfig({...config, groupDirection: 'vertical'})}>
                 <ArrowDown size={14} /> 세로 배치
+              </TabButton>
+            </TabGroup>
+          </InputGroup>
+          
+          <InputGroup>
+            <span className="input-label"><ListOrdered size={14} /> 번호 매기기 방향</span>
+            <TabGroup>
+              <TabButton id="numbering-row" type="button" active={config.numberingDirection === 'row'} onClick={() => setConfig({...config, numberingDirection: 'row'})}>
+                행 우선
+              </TabButton>
+              <TabButton type="button" active={config.numberingDirection === 'col'} onClick={() => setConfig({...config, numberingDirection: 'col'})}>
+                열 우선
+              </TabButton>
+            </TabGroup>
+          </InputGroup>
+
+          <InputGroup>
+            <span className="input-label"><Group size={14} /> 그리드 순서</span>
+            <TabGroup>
+              <TabButton id="group-order-group" type="button" active={config.numberingGroupOrder === 'group'} onClick={() => setConfig({...config, numberingGroupOrder: 'group'})}>
+                그룹 우선
+              </TabButton>
+              <TabButton type="button" active={config.numberingGroupOrder === 'all'} onClick={() => setConfig({...config, numberingGroupOrder: 'all'})}>
+                전체 우선
               </TabButton>
             </TabGroup>
           </InputGroup>

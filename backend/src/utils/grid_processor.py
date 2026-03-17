@@ -42,9 +42,11 @@ def normalize_for_save(image):
         image_max = float(image.max())
 
         if image_max > image_min:
-            image = ((image - image_min) / (image_max - image_min) * 255.0).clip(
-                0, 255
-            ).astype(np.uint8)
+            image = (
+                ((image - image_min) / (image_max - image_min) * 255.0)
+                .clip(0, 255)
+                .astype(np.uint8)
+            )
         else:
             image = np.zeros_like(image, dtype=np.uint8)
 
@@ -86,20 +88,22 @@ def resolve_frame_points(p1, p2, p3):
     dist_x = float(np.linalg.norm(primary_vector))
 
     if not np.isfinite(dist_x) or dist_x < MIN_AXIS_LENGTH:
-        raise ValueError(
-            "첫 번째 점과 두 번째 점이 너무 가까워 유효한 1차 축을 만들 수 없습니다."
-        )
+        raise ValueError("첫 번째 점과 두 번째 점이 너무 가까워 유효한 1차 축을 만들 수 없습니다.")
 
     unit_x = primary_vector / dist_x
-    base_perp = np.array([-unit_x[1], unit_x[0]], dtype=np.float64)
-    third_vector = np.array([p3[0] - p2[0], p3[1] - p2[1]], dtype=np.float64)
-    signed_secondary = float(np.dot(third_vector, base_perp))
-    dist_y = abs(signed_secondary)
+
+    secondary_vector = np.array([p3[0] - p2[0], p3[1] - p2[1]], dtype=np.float64)
+    dist_y = float(np.linalg.norm(secondary_vector))
 
     if not np.isfinite(dist_y) or dist_y < MIN_AXIS_LENGTH:
-        raise ValueError("세 점이 거의 일직선이라 유효한 2차 축을 만들 수 없습니다.")
+        raise ValueError("두 번째 점과 세 번째 점이 너무 가까워 유효한 2차 축을 만들 수 없습니다.")
 
-    unit_y = base_perp if signed_secondary >= 0 else -base_perp
+    unit_y = secondary_vector / dist_y
+
+    # dist_x가 항상 긴 축(너비)이 되도록 정규화 → 어떤 클릭 순서든 cell 계산이 올바르게 동작
+    if dist_x < dist_y:
+        unit_x, unit_y = unit_y, unit_x
+        dist_x, dist_y = dist_y, dist_x
 
     return {
         "origin": np.array(p1, dtype=np.float64),
@@ -192,22 +196,24 @@ def build_affine_matrix(source_points, destination_points):
 
 def get_warped_image(img, clicks, preview_size):
     frame = build_image_frame(clicks, preview_size, img.shape)
-    source_points = [
-        (float(frame["origin"][0]), float(frame["origin"][1])),
-        (
-            float(frame["origin"][0] + (frame["unit_x"][0] * frame["dist_x"])),
-            float(frame["origin"][1] + (frame["unit_x"][1] * frame["dist_x"])),
-        ),
-        (
-            float(frame["origin"][0] + (frame["unit_y"][0] * frame["dist_y"])),
-            float(frame["origin"][1] + (frame["unit_y"][1] * frame["dist_y"])),
-        ),
-    ]
+
+    p1 = (float(frame["origin"][0]), float(frame["origin"][1]))
+    p2 = (
+        float(frame["origin"][0] + frame["unit_x"][0] * frame["dist_x"]),
+        float(frame["origin"][1] + frame["unit_x"][1] * frame["dist_x"]),
+    )
+    p3 = (
+        float(p2[0] + frame["unit_y"][0] * frame["dist_y"]),
+        float(p2[1] + frame["unit_y"][1] * frame["dist_y"]),
+    )
+
+    source_points = [p1, p2, p3]
     destination_points = [
         (0.0, 0.0),
         (float(frame["dist_x"]), 0.0),
-        (0.0, float(frame["dist_y"])),
+        (float(frame["dist_x"]), float(frame["dist_y"])),
     ]
+
     matrix = build_affine_matrix(source_points, destination_points)
     warped = cv2.warpAffine(
         img,
@@ -216,17 +222,7 @@ def get_warped_image(img, clicks, preview_size):
         flags=cv2.INTER_LANCZOS4,
     )
 
-    # 원본 이미지와 방향이 다르면 90도 회전으로 보정
-    orig_h, orig_w = img.shape[:2]
-    warped_h, warped_w = warped.shape[:2]
-    orig_is_landscape = orig_w >= orig_h
-    warped_is_landscape = warped_w >= warped_h
-
-    if orig_is_landscape != warped_is_landscape:
-        warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
-        # frame도 함께 swap해야 cell 좌표 계산이 맞음
-        frame["dist_x"], frame["dist_y"] = frame["dist_y"], frame["dist_x"]
-        frame["scale_x"], frame["scale_y"] = frame["scale_y"], frame["scale_x"]
+    # 정규화로 항상 landscape warped가 보장되므로 회전 보정 불필요
 
     return warped, frame
 
@@ -260,6 +256,16 @@ def resolve_grid_layout(config, frame):
     if group_direction not in {"horizontal", "vertical"}:
         raise ValueError("지원하지 않는 그룹 배치 방향입니다.")
 
+    # 번호 매기기 방향: 'row' = 행 우선 {1,2,3},{4,5,6}, 'col' = 열 우선 {1,4,7},{2,5,8}
+    numbering_direction = config.get("numbering_direction", "row")
+    if numbering_direction not in {"row", "col"}:
+        numbering_direction = "row"
+
+    # 그룹 순서: 'group' = 그룹 내 우선, 'all' = 전체 우선
+    numbering_group_order = config.get("numbering_group_order", "group")
+    if numbering_group_order not in {"group", "all"}:
+        numbering_group_order = "group"
+
     # group_gap은 배치 방향에 따라 스케일 기준이 다름
     if group_direction == "horizontal":
         group_gap_px = group_gap * frame["scale_x"]
@@ -267,28 +273,42 @@ def resolve_grid_layout(config, frame):
         group_gap_px = group_gap * frame["scale_y"]
 
     if group_direction == "horizontal":
-        available_width = frame["dist_x"] - (margin_x * 2) - (group_gap_px * (groups - 1))
+        available_width = (
+            frame["dist_x"] - (margin_x * 2) - (group_gap_px * (groups - 1))
+        )
 
         if available_width <= 0:
-            raise ValueError("그룹 수나 간격이 너무 커서 가로 방향 그리드를 만들 수 없습니다.")
+            raise ValueError(
+                "그룹 수나 간격이 너무 커서 가로 방향 그리드를 만들 수 없습니다."
+            )
 
         group_width = available_width / groups
         cell_width = (group_width - (col_gap_px * (cols - 1))) / cols
-        cell_height = (frame["dist_y"] - (margin_y * 2) - (row_gap_px * (rows - 1))) / rows
+        cell_height = (
+            frame["dist_y"] - (margin_y * 2) - (row_gap_px * (rows - 1))
+        ) / rows
         group_height = (cell_height * rows) + (row_gap_px * (rows - 1))
     else:
-        available_height = frame["dist_y"] - (margin_y * 2) - (group_gap_px * (groups - 1))
+        available_height = (
+            frame["dist_y"] - (margin_y * 2) - (group_gap_px * (groups - 1))
+        )
 
         if available_height <= 0:
-            raise ValueError("그룹 수나 간격이 너무 커서 세로 방향 그리드를 만들 수 없습니다.")
+            raise ValueError(
+                "그룹 수나 간격이 너무 커서 세로 방향 그리드를 만들 수 없습니다."
+            )
 
         group_height = available_height / groups
-        cell_width = (frame["dist_x"] - (margin_x * 2) - (col_gap_px * (cols - 1))) / cols
+        cell_width = (
+            frame["dist_x"] - (margin_x * 2) - (col_gap_px * (cols - 1))
+        ) / cols
         cell_height = (group_height - (row_gap_px * (rows - 1))) / rows
         group_width = (cell_width * cols) + (col_gap_px * (cols - 1))
 
     if cell_width <= 0 or cell_height <= 0:
-        raise ValueError("축 길이, 여백, 또는 간격 설정 때문에 유효한 그리드를 만들 수 없습니다.")
+        raise ValueError(
+            "축 길이, 여백, 또는 간격 설정 때문에 유효한 그리드를 만들 수 없습니다."
+        )
 
     start_number = parse_positive_int(
         config.get("start_number", config.get("startNumber", 1)), "시작 번호"
@@ -308,6 +328,8 @@ def resolve_grid_layout(config, frame):
         "col_gap": col_gap_px,
         "group_gap": group_gap_px,
         "group_direction": group_direction,
+        "numbering_direction": numbering_direction,
+        "numbering_group_order": numbering_group_order,
         "group_width": group_width,
         "group_height": group_height,
         "cell_width": cell_width,
@@ -317,7 +339,12 @@ def resolve_grid_layout(config, frame):
         "crop_mode": crop_mode,
     }
 
+
 def iter_grid_cells(layout):
+    numbering_direction = layout.get("numbering_direction", "row")
+    numbering_group_order = layout.get("numbering_group_order", "group")
+    cells_per_group = layout["rows"] * layout["cols"]
+
     if layout["group_direction"] == "vertical":
         for group_index in range(layout["groups"]):
             group_offset = layout["margin_y"] + (
@@ -326,24 +353,44 @@ def iter_grid_cells(layout):
 
             for row_index in range(layout["rows"]):
                 for col_index in range(layout["cols"]):
-                    index = (
-                        (group_index * (layout["rows"] * layout["cols"]))
-                        + (row_index * layout["cols"])
-                        + col_index
-                    )
+                    # 번호 매기기 방향에 따라 인덱스 계산
+                    # row 우선: row_index * cols + col_index
+                    # col 우선: col_index * rows + row_index
+                    if numbering_direction == "col":
+                        cell_index = col_index * layout["rows"] + row_index
+                    else:
+                        cell_index = row_index * layout["cols"] + col_index
+
+                    # 그룹 순서에 따라 전체 인덱스 계산
+                    if numbering_group_order == "all":
+                        # 전체 우선: col -> row -> group
+                        index = (
+                            (col_index * layout["rows"] * layout["groups"])
+                            + (row_index * layout["groups"])
+                            + group_index
+                        )
+                    else:
+                        # 그룹 우선 (기본): group -> row -> col
+                        index = (group_index * cells_per_group) + cell_index
 
                     yield {
                         "cluster_number": layout["start_number"] + index,
                         "x": int(
                             round(
                                 layout["margin_x"]
-                                + (col_index * (layout["cell_width"] + layout["col_gap"]))
+                                + (
+                                    col_index
+                                    * (layout["cell_width"] + layout["col_gap"])
+                                )
                             )
                         ),
                         "y": int(
                             round(
                                 group_offset
-                                + (row_index * (layout["cell_height"] + layout["row_gap"]))
+                                + (
+                                    row_index
+                                    * (layout["cell_height"] + layout["row_gap"])
+                                )
                             )
                         ),
                         "cell_width": layout["cell_width"],
@@ -357,24 +404,44 @@ def iter_grid_cells(layout):
                 )
 
                 for col_index in range(layout["cols"]):
-                    index = (
-                        (row_index * (layout["groups"] * layout["cols"]))
-                        + (group_index * layout["cols"])
-                        + col_index
-                    )
+                    # 번호 매기기 방향에 따라 인덱스 계산
+                    # row 우선: row_index * cols + col_index
+                    # col 우선: col_index * rows + row_index
+                    if numbering_direction == "col":
+                        cell_index = col_index * layout["rows"] + row_index
+                    else:
+                        cell_index = row_index * layout["cols"] + col_index
+
+                    # 그룹 순서에 따라 전체 인덱스 계산
+                    if numbering_group_order == "all":
+                        # 전체 우선: row -> col -> group
+                        index = (
+                            (row_index * layout["cols"] * layout["groups"])
+                            + (col_index * layout["groups"])
+                            + group_index
+                        )
+                    else:
+                        # 그룹 우선 (기본): group -> row -> col
+                        index = (group_index * cells_per_group) + cell_index
 
                     yield {
                         "cluster_number": layout["start_number"] + index,
                         "x": int(
                             round(
                                 group_offset
-                                + (col_index * (layout["cell_width"] + layout["col_gap"]))
+                                + (
+                                    col_index
+                                    * (layout["cell_width"] + layout["col_gap"])
+                                )
                             )
                         ),
                         "y": int(
                             round(
                                 layout["margin_y"]
-                                + (row_index * (layout["cell_height"] + layout["row_gap"]))
+                                + (
+                                    row_index
+                                    * (layout["cell_height"] + layout["row_gap"])
+                                )
                             )
                         ),
                         "cell_width": layout["cell_width"],
@@ -393,7 +460,12 @@ def extract_cluster_image(warped, cell):
     end_x = min(start_x + image_width, warped_width)
     end_y = min(start_y + image_height, warped_height)
 
-    if start_x < 0 or start_y < 0 or start_x >= warped_width or start_y >= warped_height:
+    if (
+        start_x < 0
+        or start_y < 0
+        or start_x >= warped_width
+        or start_y >= warped_height
+    ):
         return None
 
     if end_x <= start_x or end_y <= start_y:
@@ -473,10 +545,7 @@ def crop_by_fixed_pixel_split(warped, cell, save_dir, custom_date, patch_size):
             patch_index += 1
             count += 1
 
-    print(
-        f"cluster={cell['cluster_number']} "
-        f"saved_patches={count}"
-    )
+    print(f"cluster={cell['cluster_number']} saved_patches={count}")
 
     return count
 

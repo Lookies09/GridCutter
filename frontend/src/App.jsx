@@ -21,6 +21,8 @@ const DEFAULT_CONFIG = {
   patchSize: 100,
   startNumber: 1,
   cropMode: 'visible_grid',
+  numberingDirection: 'row', // 'row' = 행 우선 {1,2,3},{4,5,6}, 'col' = 열 우선 {1,4,7},{2,5,8}
+  numberingGroupOrder: 'group', // 'group' = 그룹 내 행 우선, 'all' = 전체 행 우선
 };
 
 const VALID_CROP_MODES = new Set(['visible_grid', 'fixed_pixel_split']);
@@ -31,6 +33,8 @@ const normalizeConfig = (config = {}) => ({
   startNumber: Number(config.startNumber ?? DEFAULT_CONFIG.startNumber) || DEFAULT_CONFIG.startNumber,
   patchSize: Number(config.patchSize ?? DEFAULT_CONFIG.patchSize) || DEFAULT_CONFIG.patchSize,
   cropMode: config.cropMode || config.crop_mode || DEFAULT_CONFIG.cropMode,
+  numberingDirection: config.numberingDirection || DEFAULT_CONFIG.numberingDirection,
+  numberingGroupOrder: config.numberingGroupOrder || DEFAULT_CONFIG.numberingGroupOrder,
 });
 
 const validateCropConfig = (clicks, config, imageData) => {
@@ -302,6 +306,8 @@ function App() {
           start_number: Number(config.startNumber) || 1,
           crop_mode: config.cropMode,
           patchSize: Number(config.patchSize) || DEFAULT_CONFIG.patchSize,
+          numbering_direction: config.numberingDirection || 'row',
+          numbering_group_order: config.numberingGroupOrder || 'group',
         },
         custom_date: targetDate,
       };
