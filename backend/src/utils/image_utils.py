@@ -46,9 +46,12 @@ def get_preview_image(file_path, max_size=2048):
 
         return {
             "base64": f"data:image/jpeg;base64,{base64_str}",
-            "orig_w": orig_w, "orig_h": orig_h,
-            "preview_w": new_w, "preview_h": new_h
+            "original_w": orig_w,   # ← orig_w → original_w
+            "original_h": orig_h,   # ← orig_h → original_h
+            "preview_w": new_w,
+            "preview_h": new_h
         }
+
     except Exception as e:
         print(f"Error: {e}")
         return None

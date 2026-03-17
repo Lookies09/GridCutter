@@ -46,21 +46,22 @@ class RiceGridAPI:
         return None
 
     def open_file_dialog(self):
-        """파일 선택 및 미리보기 데이터 반환"""
         result = self._window.create_file_dialog(
             webview.OPEN_DIALOG,
             file_types=('TIFF Files (*.tif;*.tiff)', 'All files (*.*)')
         )
         
-        if not result: return None
+        if not result:
+            return None
         
         path = result[0]
         img_data = get_preview_image(path)
         
         if img_data:
-            img_data["path"] = path # 원본 경로 포함
+            img_data["path"] = path  
             return img_data
         return None
+
 
     def process_crop(self, data):
         try:
