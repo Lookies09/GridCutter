@@ -141,11 +141,12 @@ function TopBar({ handleOpenFile, isLoading, showHelp, setShowHelp, imageData, c
 
         <GuideSection>
           <h4><MousePointer2 size={14} /> 영역 지정 (3점 클릭)</h4>
-          <p>ㄱ자 모양의 기준점을 순서대로 찍어주세요.</p>
+          <p>점의 절대 방향과 무관하게, 각 점의 역할만 순서대로 유지해서 찍어주세요.</p>
           <ul>
-            <li>첫 번째: 좌상단 기준점</li>
-            <li>두 번째: 가로 축 (기울기)</li>
-            <li>세 번째: 세로 높이 축</li>
+            <li>첫 번째: 항상 시작점</li>
+            <li>두 번째: 첫 번째 축의 진행 방향</li>
+            <li>세 번째: 두 번째 축의 방향과 범위 결정점</li>
+            <li>`ㄱ`, `ㄴ`, `┘`, `┌` 형태 모두 같은 규칙으로 해석됩니다.</li>
           </ul>
         </GuideSection>
 

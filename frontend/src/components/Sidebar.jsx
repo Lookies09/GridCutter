@@ -11,7 +11,8 @@ import {
   Hash, 
   Palette,
   LayoutGrid,
-  Square
+  Square,
+  Crop
 } from 'lucide-react';
 
 // --- Styled Components ---
@@ -73,7 +74,8 @@ const InputGroup = styled.div`
   gap: 8px;
   min-width: 0;
 
-  label {
+  label,
+  .input-label {
     font-size: 12px;
     font-weight: 600;
     color: #9ca3af;
@@ -236,6 +238,7 @@ function Sidebar({
           <SectionTitle><Save size={16} /> Presets</SectionTitle>
           <div style={{ display: 'flex', gap: '8px' }}>
             <input 
+              aria-label="새 프리셋 이름"
               style={{ flex: 1, padding: '10px', background: '#262626', color: 'white', border: '1px solid #3f3f46', borderRadius: '8px', fontSize: '13px', outline: 'none' }}
               placeholder="새 프리셋 이름..."
               value={presetName}
@@ -270,63 +273,78 @@ function Sidebar({
           
           <TwoColumnGrid>
             <InputGroup>
-              <label><LayoutGrid size={14} /> 행 (Rows)</label>
-              <input type="number" value={config.rows} onChange={e => setConfig({...config, rows: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-rows"><LayoutGrid size={14} /> 행 (Rows)</label>
+              <input id="grid-rows" type="number" value={config.rows} onChange={e => setConfig({...config, rows: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
             <InputGroup>
-              <label><LayoutGrid size={14} /> 열 (Cols)</label>
-              <input type="number" value={config.cols} onChange={e => setConfig({...config, cols: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-cols"><LayoutGrid size={14} /> 열 (Cols)</label>
+              <input id="grid-cols" type="number" value={config.cols} onChange={e => setConfig({...config, cols: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
             <InputGroup>
-              <label><Layers size={14} /> 그룹 수</label>
-              <input type="number" value={config.groups} onChange={e => setConfig({...config, groups: parseInt(e.target.value) || 0})}/>
-            </InputGroup>
-            <InputGroup>
-              <label><Maximize size={14} /> 추출 크기</label>
-              <input type="number" value={config.patchSize} onChange={e => setConfig({...config, patchSize: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-groups"><Layers size={14} /> 그룹 수</label>
+              <input id="grid-groups" type="number" value={config.groups} onChange={e => setConfig({...config, groups: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
           </TwoColumnGrid>
 
           <TwoColumnGrid>
             <InputGroup>
-              <label><Square size={14} /> 여백</label>
-              <input type="number" value={config.margin} onChange={e => setConfig({...config, margin: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-margin"><Square size={14} /> 여백</label>
+              <input id="grid-margin" type="number" value={config.margin} onChange={e => setConfig({...config, margin: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
             <InputGroup>
-              <label><Square size={14} /> 그룹 간격</label>
-              <input type="number" value={config.groupGap} onChange={e => setConfig({...config, groupGap: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-group-gap"><Square size={14} /> 그룹 간격</label>
+              <input id="grid-group-gap" type="number" value={config.groupGap} onChange={e => setConfig({...config, groupGap: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
             <InputGroup>
-              <label><Square size={14} /> 가로 간격</label>
-              <input type="number" value={config.colGap} onChange={e => setConfig({...config, colGap: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-col-gap"><Square size={14} /> 가로 간격</label>
+              <input id="grid-col-gap" type="number" value={config.colGap} onChange={e => setConfig({...config, colGap: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
             <InputGroup>
-              <label><Square size={14} /> 세로 간격</label>
-              <input type="number" value={config.rowGap} onChange={e => setConfig({...config, rowGap: parseInt(e.target.value) || 0})}/>
+              <label htmlFor="grid-row-gap"><Square size={14} /> 세로 간격</label>
+              <input id="grid-row-gap" type="number" value={config.rowGap} onChange={e => setConfig({...config, rowGap: parseInt(e.target.value, 10) || 0})}/>
             </InputGroup>
           </TwoColumnGrid>
 
           <InputGroup>
-            <label><ArrowRight size={14} /> 그룹 배치 방향</label>
+            <span className="input-label"><ArrowRight size={14} /> 그룹 배치 방향</span>
             <TabGroup>
-              <TabButton active={config.groupDirection === 'horizontal'} onClick={() => setConfig({...config, groupDirection: 'horizontal'})}>
+              <TabButton id="group-direction-horizontal" type="button" active={config.groupDirection === 'horizontal'} onClick={() => setConfig({...config, groupDirection: 'horizontal'})}>
                 <ArrowRight size={14} /> 가로 배치
               </TabButton>
-              <TabButton active={config.groupDirection === 'vertical'} onClick={() => setConfig({...config, groupDirection: 'vertical'})}>
+              <TabButton type="button" active={config.groupDirection === 'vertical'} onClick={() => setConfig({...config, groupDirection: 'vertical'})}>
                 <ArrowDown size={14} /> 세로 배치
               </TabButton>
             </TabGroup>
           </InputGroup>
 
+          <InputGroup>
+            <span className="input-label"><Crop size={14} /> Crop 방식</span>
+            <TabGroup>
+              <TabButton id="crop-mode-visible" type="button" active={config.cropMode === 'visible_grid'} onClick={() => setConfig({...config, cropMode: 'visible_grid'})}>
+                보이는 그리드
+              </TabButton>
+              <TabButton type="button" active={config.cropMode === 'fixed_pixel_split'} onClick={() => setConfig({...config, cropMode: 'fixed_pixel_split'})}>
+                픽셀 기준 분할
+              </TabButton>
+            </TabGroup>
+          </InputGroup>
+
+          {config.cropMode === 'fixed_pixel_split' && (
+            <InputGroup>
+              <label htmlFor="grid-patch-size"><Maximize size={14} /> 추출 크기 (px)</label>
+              <input id="grid-patch-size" type="number" value={config.patchSize} onChange={e => setConfig({...config, patchSize: parseInt(e.target.value, 10) || 0})}/>
+            </InputGroup>
+          )}
+
           <TwoColumnGrid>
             <InputGroup>
-              <label><Hash size={14} /> 시작 번호</label>
-              <input type="number" value={config.startNumber || 1} onChange={e => setConfig({...config, startNumber: parseInt(e.target.value) || 1})} />
+              <label htmlFor="grid-start-number"><Hash size={14} /> 시작 번호</label>
+              <input id="grid-start-number" type="number" value={config.startNumber || 1} onChange={e => setConfig({...config, startNumber: parseInt(e.target.value, 10) || 1})} />
             </InputGroup>
             <InputGroup>
-              <label><Palette size={14} /> 가이드 색상</label>
+              <label htmlFor="grid-color"><Palette size={14} /> 가이드 색상</label>
               <ColorPickerContainer>
-                <input type="color" value={config.gridColor} onChange={e => setConfig({...config, gridColor: e.target.value})} />
+                <input id="grid-color" type="color" value={config.gridColor} onChange={e => setConfig({...config, gridColor: e.target.value})} />
                 <div className="color-info">
                   <span className="hex">{config.gridColor.toUpperCase()}</span>
                   <span className="label">Color</span>

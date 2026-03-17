@@ -152,23 +152,13 @@ const GridCanvas = ({ imageData, config, clicks, onCanvasClick }) => {
     });
 
     // 3. 그리드 및 번호 그리기
-    if (clicks.length === 3) {
-      const gridInfo = drawRotatedGrid(ctx, clicks, config, transform.scale);
-      if (gridInfo) {
-        drawGridNumbers(
-          ctx, 
-          { 
-            width: gridInfo.distX, 
-            height: gridInfo.distY, 
-            p1: clicks[0], 
-            unitX: gridInfo.unitX, 
-            unitY: gridInfo.unitY 
-          }, 
-          config, 
-          transform.scale
-        );
+      if (clicks.length === 3) {
+        const layout = drawRotatedGrid(ctx, clicks, config, transform.scale);
+
+        if (layout) {
+          drawGridNumbers(ctx, layout, transform.scale);
+        }
       }
-    }
     
     ctx.restore();
   }, [imageObj, clicks, config, transform, imageData]);

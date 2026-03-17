@@ -1,6 +1,5 @@
-/**
- * 선 그리기 유틸리티
- */
+const MIN_AXIS_LENGTH = 4;
+
 export const drawLine = (ctx, x1, y1, x2, y2) => {
   ctx.beginPath();
   ctx.moveTo(x1, y1);
@@ -8,58 +7,169 @@ export const drawLine = (ctx, x1, y1, x2, y2) => {
   ctx.stroke();
 };
 
-/**
- * 회전된 그리드 계산 및 그리기
- */
-export const drawRotatedGrid = (ctx, pts, cfg, scale) => {
-  const { rows, cols, margin, rowGap, colGap, groupGap, groups, gridColor, groupDirection } = cfg;
-  const [p1, p2, p3] = pts;
+const parsePositiveInt = (value, label) => {
+  const parsed = Number(value);
 
-  const vX = { x: p2.x - p1.x, y: p2.y - p1.y };
-  const distX = Math.sqrt(vX.x ** 2 + vX.y ** 2);
-  const unitX = { x: vX.x / distX, y: vX.y / distX };
-  const unitY = { x: -unitX.y, y: unitX.x }; 
-
-  const vP3 = { x: p3.x - p1.x, y: p3.y - p1.y };
-  const distY = Math.abs(vP3.x * unitY.x + vP3.y * unitY.y); 
-
-  ctx.strokeStyle = gridColor || '#ffffff'; 
-  ctx.lineWidth = 1.4 / scale;
-
-  let cellWidth, cellHeight, groupW, groupH;
-
-  if (groupDirection === 'vertical') {
-    const totalGroupGap = groupGap * (groups - 1);
-    const availableHeight = distY - (margin * 2) - totalGroupGap;
-    groupH = availableHeight / groups;
-    cellWidth = (distX - (margin * 2) - (colGap * (cols - 1))) / cols;
-    cellHeight = (groupH - (rowGap * (rows - 1))) / rows;
-  } else {
-    const totalGroupGap = groupGap * (groups - 1);
-    const availableWidth = distX - (margin * 2) - totalGroupGap;
-    groupW = availableWidth / groups;
-    cellWidth = (groupW - (colGap * (cols - 1))) / cols;
-    cellHeight = (distY - (margin * 2) - (rowGap * (rows - 1))) / rows;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} 값이 올바르지 않습니다.`);
   }
 
-  for (let g = 0; g < groups; g++) {
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        let dX, dY;
-        if (groupDirection === 'vertical') {
-          const gOffset = margin + g * (groupH + groupGap);
-          dX = margin + (c * (cellWidth + colGap));
-          dY = gOffset + (r * (cellHeight + rowGap));
-        } else {
-          const gOffset = margin + g * (groupW + groupGap);
-          dX = gOffset + (c * (cellWidth + colGap));
-          dY = margin + (r * (cellHeight + rowGap));
-        }
+  return Math.floor(parsed);
+};
 
-        const pTL = { x: p1.x + (unitX.x * dX) + (unitY.x * dY), y: p1.y + (unitX.y * dX) + (unitY.y * dY) };
-        const pTR = { x: pTL.x + (unitX.x * cellWidth), y: pTL.y + (unitX.y * cellWidth) };
-        const pBL = { x: pTL.x + (unitY.x * cellHeight), y: pTL.y + (unitY.y * cellHeight) };
-        const pBR = { x: pTR.x + (unitY.x * cellHeight), y: pTR.y + (unitY.y * cellHeight) };
+const parseNonNegativeNumber = (value, label) => {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error(`${label} 값이 올바르지 않습니다.`);
+  }
+
+  return parsed;
+};
+
+export const resolveGridFrame = (pts) => {
+  if (!Array.isArray(pts) || pts.length !== 3) {
+    throw new Error('그리드를 해석하려면 3개의 기준점이 필요합니다.');
+  }
+
+  const [p1, p2, p3] = pts;
+  const vX = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const distX = Math.hypot(vX.x, vX.y);
+
+  if (!Number.isFinite(distX) || distX < MIN_AXIS_LENGTH) {
+    throw new Error('첫 번째 점과 두 번째 점이 너무 가까워 유효한 1차 축을 만들 수 없습니다.');
+  }
+
+  const unitX = { x: vX.x / distX, y: vX.y / distX };
+  const basePerp = { x: -unitX.y, y: unitX.x };
+  const vP3 = { x: p3.x - p2.x, y: p3.y - p2.y };
+  const signedSecondary = (vP3.x * basePerp.x) + (vP3.y * basePerp.y);
+  const distY = Math.abs(signedSecondary);
+
+  if (!Number.isFinite(distY) || distY < MIN_AXIS_LENGTH) {
+    throw new Error('세 점이 거의 일직선이라 유효한 2차 축을 만들 수 없습니다.');
+  }
+
+  const unitY = signedSecondary >= 0
+    ? basePerp
+    : { x: -basePerp.x, y: -basePerp.y };
+
+  return { p1, p2, p3, unitX, unitY, distX, distY };
+};
+
+export const resolveGridLayout = (pts, cfg) => {
+  const frame = resolveGridFrame(pts);
+  const rows = parsePositiveInt(cfg.rows, '행');
+  const cols = parsePositiveInt(cfg.cols, '열');
+  const groups = parsePositiveInt(cfg.groups, '그룹 수');
+  const margin = parseNonNegativeNumber(cfg.margin, '여백');
+  const rowGap = parseNonNegativeNumber(cfg.rowGap, '세로 간격');
+  const colGap = parseNonNegativeNumber(cfg.colGap, '가로 간격');
+  const groupGap = parseNonNegativeNumber(cfg.groupGap, '그룹 간격');
+  const groupDirection = cfg.groupDirection === 'vertical' ? 'vertical' : 'horizontal';
+
+  let cellWidth;
+  let cellHeight;
+  let groupWidth = null;
+  let groupHeight = null;
+
+  if (groupDirection === 'vertical') {
+    const availableHeight = frame.distY - (margin * 2) - (groupGap * (groups - 1));
+
+    if (availableHeight <= 0) {
+      throw new Error('그룹 수나 간격이 너무 커서 세로 방향 그리드를 만들 수 없습니다.');
+    }
+
+    groupHeight = availableHeight / groups;
+    cellWidth = (frame.distX - (margin * 2) - (colGap * (cols - 1))) / cols;
+    cellHeight = (groupHeight - (rowGap * (rows - 1))) / rows;
+    groupWidth = (cellWidth * cols) + (colGap * (cols - 1));
+  } else {
+    const availableWidth = frame.distX - (margin * 2) - (groupGap * (groups - 1));
+
+    if (availableWidth <= 0) {
+      throw new Error('그룹 수나 간격이 너무 커서 가로 방향 그리드를 만들 수 없습니다.');
+    }
+
+    groupWidth = availableWidth / groups;
+    cellWidth = (groupWidth - (colGap * (cols - 1))) / cols;
+    cellHeight = (frame.distY - (margin * 2) - (rowGap * (rows - 1))) / rows;
+    groupHeight = (cellHeight * rows) + (rowGap * (rows - 1));
+  }
+
+  if (!Number.isFinite(cellWidth) || !Number.isFinite(cellHeight) || cellWidth <= 0 || cellHeight <= 0) {
+    throw new Error('축 길이, 여백, 또는 간격 설정 때문에 유효한 그리드를 만들 수 없습니다.');
+  }
+
+  return {
+    ...frame,
+    rows,
+    cols,
+    groups,
+    margin,
+    rowGap,
+    colGap,
+    groupGap,
+    groupDirection,
+    cellWidth,
+    cellHeight,
+    groupWidth,
+    groupHeight,
+    startNumber: parsePositiveInt(cfg.startNumber ?? 1, '시작 번호'),
+    gridColor: cfg.gridColor || '#ffffff',
+  };
+};
+
+const getCellOffset = (layout, groupIndex, rowIndex, colIndex) => {
+  if (layout.groupDirection === 'vertical') {
+    const groupOffset = layout.margin + (groupIndex * (layout.groupHeight + layout.groupGap));
+
+    return {
+      dX: layout.margin + (colIndex * (layout.cellWidth + layout.colGap)),
+      dY: groupOffset + (rowIndex * (layout.cellHeight + layout.rowGap)),
+    };
+  }
+
+  const groupOffset = layout.margin + (groupIndex * (layout.groupWidth + layout.groupGap));
+
+  return {
+    dX: groupOffset + (colIndex * (layout.cellWidth + layout.colGap)),
+    dY: layout.margin + (rowIndex * (layout.cellHeight + layout.rowGap)),
+  };
+};
+
+export const drawRotatedGrid = (ctx, pts, cfg, scale) => {
+  let layout;
+
+  try {
+    layout = resolveGridLayout(pts, cfg);
+  } catch {
+    return null;
+  }
+
+  ctx.strokeStyle = layout.gridColor;
+  ctx.lineWidth = 1.4 / scale;
+
+  for (let groupIndex = 0; groupIndex < layout.groups; groupIndex += 1) {
+    for (let rowIndex = 0; rowIndex < layout.rows; rowIndex += 1) {
+      for (let colIndex = 0; colIndex < layout.cols; colIndex += 1) {
+        const { dX, dY } = getCellOffset(layout, groupIndex, rowIndex, colIndex);
+        const pTL = {
+          x: layout.p1.x + (layout.unitX.x * dX) + (layout.unitY.x * dY),
+          y: layout.p1.y + (layout.unitX.y * dX) + (layout.unitY.y * dY),
+        };
+        const pTR = {
+          x: pTL.x + (layout.unitX.x * layout.cellWidth),
+          y: pTL.y + (layout.unitX.y * layout.cellWidth),
+        };
+        const pBL = {
+          x: pTL.x + (layout.unitY.x * layout.cellHeight),
+          y: pTL.y + (layout.unitY.y * layout.cellHeight),
+        };
+        const pBR = {
+          x: pTR.x + (layout.unitY.x * layout.cellHeight),
+          y: pTR.y + (layout.unitY.y * layout.cellHeight),
+        };
 
         drawLine(ctx, pTL.x, pTL.y, pTR.x, pTR.y);
         drawLine(ctx, pTR.x, pTR.y, pBR.x, pBR.y);
@@ -69,59 +179,33 @@ export const drawRotatedGrid = (ctx, pts, cfg, scale) => {
     }
   }
 
-  return { distX, distY, unitX, unitY };
+  return layout;
 };
 
-/**
- * 그리드 내부 번호 표시
- */
-export const drawGridNumbers = (ctx, info, cfg, currentScale) => {
-  const { rows, cols, groups, groupDirection, margin, rowGap, colGap, groupGap, startNumber = 1 } = cfg;
-  const { width, height, p1, unitX, unitY } = info;
-
-  let cellW, cellH, groupW, groupH;
-  if (groupDirection === 'horizontal') {
-    const availW = width - (margin * 2) - (groupGap * (groups - 1));
-    groupW = availW / groups;
-    cellW = (groupW - (colGap * (cols - 1))) / cols;
-    cellH = (height - (margin * 2) - (rowGap * (rows - 1))) / rows;
-  } else {
-    const availH = height - (margin * 2) - (groupGap * (groups - 1));
-    groupH = availH / groups;
-    cellW = (width - (margin * 2) - (colGap * (cols - 1))) / cols;
-    cellH = (groupH - (rowGap * (rows - 1))) / rows;
+export const drawGridNumbers = (ctx, layout, currentScale) => {
+  if (!layout) {
+    return;
   }
 
   ctx.font = `bold ${Math.max(12, 14 / currentScale)}px Arial`;
-  ctx.fillStyle = "yellow";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  ctx.fillStyle = 'yellow';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
 
-  for (let r = 0; r < rows; r++) {
-    for (let g = 0; g < groups; g++) {
-      for (let c = 0; c < cols; c++) {
-        const index = groupDirection === 'vertical' 
-          ? (g * (rows * cols)) + (r * cols) + (c + 1)
-          : (r * (groups * cols)) + (g * cols) + (c + 1);
+  for (let rowIndex = 0; rowIndex < layout.rows; rowIndex += 1) {
+    for (let groupIndex = 0; groupIndex < layout.groups; groupIndex += 1) {
+      for (let colIndex = 0; colIndex < layout.cols; colIndex += 1) {
+        const index = layout.groupDirection === 'vertical'
+          ? (groupIndex * (layout.rows * layout.cols)) + (rowIndex * layout.cols) + colIndex
+          : (rowIndex * (layout.groups * layout.cols)) + (groupIndex * layout.cols) + colIndex;
 
-        const num = index + startNumber -1;
+        const { dX, dY } = getCellOffset(layout, groupIndex, rowIndex, colIndex);
+        const realX = layout.p1.x + (layout.unitX.x * (dX + (layout.cellWidth / 2))) + (layout.unitY.x * (dY + (layout.cellHeight / 2)));
+        const realY = layout.p1.y + (layout.unitX.y * (dX + (layout.cellWidth / 2))) + (layout.unitY.y * (dY + (layout.cellHeight / 2)));
 
-        let dX, dY;
-        if (groupDirection === 'horizontal') {
-          dX = (margin + g * (groupW + groupGap)) + (c * (cellW + colGap)) + (cellW / 2);
-          dY = margin + (r * (cellH + rowGap)) + (cellH / 2);
-        } else {
-          dX = margin + (c * (cellW + colGap)) + (cellW / 2);
-          dY = (margin + g * (groupH + groupGap)) + (r * (cellH + rowGap)) + (cellH / 2);
-        }
-
-        const realX = p1.x + (unitX.x * dX) + (unitY.x * dY);
-        const realY = p1.y + (unitX.y * dX) + (unitY.y * dY);
-
-        
-        ctx.shadowColor = "black";
+        ctx.shadowColor = 'black';
         ctx.shadowBlur = 4;
-        ctx.fillText(num, realX, realY);
+        ctx.fillText(layout.startNumber + index, realX, realY);
         ctx.shadowBlur = 0;
       }
     }

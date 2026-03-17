@@ -6,6 +6,64 @@ import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import toast, { Toaster } from 'react-hot-toast';
 import { Save, FolderOpen, AlertTriangle, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+import { resolveGridLayout } from './utils/gridUtils';
+
+const DEFAULT_CONFIG = {
+  rows: 6,
+  cols: 4,
+  margin: 0,
+  rowGap: 10,
+  colGap: 10,
+  groupGap: 10,
+  groups: 1,
+  groupDirection: 'horizontal',
+  gridColor: '#FF00FF',
+  patchSize: 100,
+  startNumber: 1,
+  cropMode: 'visible_grid',
+};
+
+const VALID_CROP_MODES = new Set(['visible_grid', 'fixed_pixel_split']);
+
+const normalizeConfig = (config = {}) => ({
+  ...DEFAULT_CONFIG,
+  ...config,
+  startNumber: Number(config.startNumber ?? DEFAULT_CONFIG.startNumber) || DEFAULT_CONFIG.startNumber,
+  patchSize: Number(config.patchSize ?? DEFAULT_CONFIG.patchSize) || DEFAULT_CONFIG.patchSize,
+  cropMode: config.cropMode || config.crop_mode || DEFAULT_CONFIG.cropMode,
+});
+
+const validateCropConfig = (clicks, config, imageData) => {
+  if (clicks.length !== 3) {
+    throw new Error('그리드 설정을 위해 3개의 점을 먼저 찍어주세요.');
+  }
+
+  if (!VALID_CROP_MODES.has(config.cropMode)) {
+    throw new Error('지원하지 않는 crop 방식입니다.');
+  }
+
+  if (!Number.isInteger(Number(config.startNumber)) || Number(config.startNumber) <= 0) {
+    throw new Error('시작 번호는 1 이상의 정수여야 합니다.');
+  }
+
+  const layout = resolveGridLayout(clicks, config);
+
+  if (config.cropMode === 'fixed_pixel_split') {
+    if (!Number.isInteger(Number(config.patchSize)) || Number(config.patchSize) <= 0) {
+      throw new Error('추출 크기를 1 이상의 정수로 입력해야 합니다.');
+    }
+
+    const scaleX = imageData.original_w / imageData.preview_w;
+    const scaleY = imageData.original_h / imageData.preview_h;
+    const cellWidthPx = layout.cellWidth * scaleX;
+    const cellHeightPx = layout.cellHeight * scaleY;
+
+    if (Number(config.patchSize) > cellWidthPx || Number(config.patchSize) > cellHeightPx) {
+      throw new Error('픽셀 기준 분할 크기가 셀 크기보다 커서 crop을 진행할 수 없습니다.');
+    }
+  }
+};
+
 // --- Animations ---
 const spin = keyframes`
   0% { transform: rotate(0deg); }
@@ -153,10 +211,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [clicks, setClicks] = useState([]);
-  const [config, setConfig] = useState({
-    rows: 6, cols: 4, margin: 0, rowGap: 10, colGap: 10, groupGap: 10,
-    groups: 1, groupDirection: 'horizontal', gridColor: '#FF00FF', patchSize: 100
-  });
+  const [config, setConfig] = useState(DEFAULT_CONFIG);
   const [showConfirm, setShowConfirm] = useState(false);
   const [targetDate, setTargetDate] = useState("");
 
@@ -219,65 +274,80 @@ function App() {
   };
 
   const handleFinalCrop = async () => {
-  if (isLoading) return;
+    if (isLoading) return;
 
-  const savePath = await window.pywebview.api.select_save_folder();
-  if (!savePath) return;
+    try {
+      validateCropConfig(clicks, config, imageData);
+    } catch (error) {
+      toast.error(error.message || '현재 설정으로는 crop을 진행할 수 없습니다.');
+      return;
+    }
 
-  setShowConfirm(false);
-  setIsLoading(true);
+    const savePath = await window.pywebview.api.select_save_folder();
+    if (!savePath) return;
 
-  const loadingToast = toast.loading('그리드를 분석하여 추출하고 있습니다...');
+    setShowConfirm(false);
+    setIsLoading(true);
 
-  try {
-    const payload = {
-      path: imageData.path,
-      save_path: savePath,
-      preview_size: { w: imageData.preview_w, h: imageData.preview_h },
-      clicks: clicks,
-      config: { ...config, start_number: config.startNumber || 1 },
-      custom_date: targetDate
-    };
-    
-    const response = await window.pywebview.api.process_crop(payload);
-    
-    toast.dismiss(loadingToast);
+    const loadingToast = toast.loading('그리드를 분석하여 추출하고 있습니다...');
 
-    const successMsg = typeof response === 'object' ? response.message : response;
+    try {
+      const payload = {
+        path: imageData.path,
+        save_path: savePath,
+        preview_size: { w: imageData.preview_w, h: imageData.preview_h },
+        clicks: clicks,
+        config: {
+          ...config,
+          start_number: Number(config.startNumber) || 1,
+          crop_mode: config.cropMode,
+          patchSize: Number(config.patchSize) || DEFAULT_CONFIG.patchSize,
+        },
+        custom_date: targetDate,
+      };
 
-    toast.success(successMsg || '그리드 추출이 완료되었습니다!', {
-      duration: 5000,
-      style: {
-        background: '#1f1f23',
-        color: '#fff',
-        border: '1px solid #333',
-        borderRadius: '10px',
-        padding: '16px',
-      },
-      iconTheme: {
-        primary: '#6366f1',
-        secondary: '#fff',
-      },
-    });
+      const response = await window.pywebview.api.process_crop(payload);
 
-  } catch (error) {
-    toast.dismiss(loadingToast);
-    
-    const errorMsg = error?.message || String(error);
+      if (response && typeof response === 'object' && response.status === 'error') {
+        throw new Error(response.message || 'crop 처리 중 오류가 발생했습니다.');
+      }
 
-    toast.error(`작업 중 오류 발생: ${errorMsg}`, {
-      duration: 6000,
-      style: {
-        background: '#1f1f23',
-        color: '#ff4d4d',
-        border: '1px solid #333',
-        borderRadius: '10px',
-      },
-    });
-  } finally {
-    setIsLoading(false);
-  }
-};
+      toast.dismiss(loadingToast);
+
+      const successMsg = typeof response === 'object' ? response.message : response;
+
+      toast.success(successMsg || '그리드 추출이 완료되었습니다!', {
+        duration: 5000,
+        style: {
+          background: '#1f1f23',
+          color: '#fff',
+          border: '1px solid #333',
+          borderRadius: '10px',
+          padding: '16px',
+        },
+        iconTheme: {
+          primary: '#6366f1',
+          secondary: '#fff',
+        },
+      });
+    } catch (error) {
+      toast.dismiss(loadingToast);
+
+      const errorMsg = error?.message || String(error);
+
+      toast.error(`작업 중 오류 발생: ${errorMsg}`, {
+        duration: 6000,
+        style: {
+          background: '#1f1f23',
+          color: '#ff4d4d',
+          border: '1px solid #333',
+          borderRadius: '10px',
+        },
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const saveCurrentAsPreset = async () => {
   // 이름 입력 체크
@@ -304,7 +374,7 @@ function App() {
   const newPreset = { 
     id: Date.now(), 
     name: presetName, 
-    config: { ...config }, 
+    config: normalizeConfig(config), 
     clicks: [...clicks] 
   };
   
@@ -347,7 +417,7 @@ function App() {
   }
 
   if (window.confirm(`'${preset.name}' 설정을 불러올까요?`)) {
-    setConfig(preset.config);
+    setConfig(normalizeConfig(preset.config));
     setClicks(preset.clicks);
     toast.success(`'${preset.name}' 적용 완료`, {
       icon: <CheckCircle2 size={18} color="#10b981" />,
@@ -386,8 +456,9 @@ function App() {
                 <h3>최종 확인</h3>
               </ModalHeader>
               <InputField>
-                <label>추출 날짜 (YYYYMMDD)</label>
+                <label htmlFor="target-date-input">추출 날짜 (YYYYMMDD)</label>
                 <input 
+                  id="target-date-input"
                   type="text" 
                   value={targetDate} 
                   onChange={e => setTargetDate(e.target.value.replace(/[^0-9]/g, ''))}
